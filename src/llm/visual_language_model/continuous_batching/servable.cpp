@@ -59,6 +59,11 @@ void VisualLanguageModelServable::logPerfMetrics(ov::genai::VLMPerfMetrics& perf
     const double llmTtftMs = perfMetrics.get_ttft().mean;
     const double ttftMs = llmTtftMs + prepareEmbeddingsTimeMs;
     const double prefillSpeedTps = calculatePrefillSpeed(inputTokenCount, llmTtftMs);
+    const double tpotMs = perfMetrics.get_tpot().mean;
+    // Generation speed from the mean time per output token; -1 when no second token was generated
+    const double generationSpeedTps = tpotMs > 0 ? 1000.0 / tpotMs : -1.0;
+
+    SPDLOG_LOGGER_INFO(llm_calculator_logger, "TTFT (ms): {:.0f} TPS (tok/s): {:.2f}", ttftMs, generationSpeedTps);
 
     SPDLOG_LOGGER_DEBUG(
         llm_calculator_logger,
@@ -98,7 +103,7 @@ std::shared_ptr<GenAiServableProperties> VisualLanguageModelServable::getPropert
 
 absl::Status VisualLanguageModelServable::prepareCompleteResponse(std::shared_ptr<GenAiServableExecutionContext>& executionContext) {
     auto status = GenAiServable::prepareCompleteResponse(executionContext);
-    if (status.ok() && llm_calculator_logger->should_log(spdlog::level::debug)) {
+    if (status.ok() && llm_calculator_logger->should_log(spdlog::level::info)) {
         auto vlmExecutionContext = std::static_pointer_cast<VisualLanguageModelServableExecutionContext>(executionContext);
         auto perfMetrics = tryGetVlmPerfMetrics(vlmExecutionContext->generationHandle);
         if (perfMetrics)
@@ -111,7 +116,7 @@ absl::Status VisualLanguageModelServable::preparePartialResponse(std::shared_ptr
     auto status = GenAiServable::preparePartialResponse(executionContext);
     if (status.ok() &&
         !executionContext->sendLoopbackSignal &&
-        llm_calculator_logger->should_log(spdlog::level::debug)) {
+        llm_calculator_logger->should_log(spdlog::level::info)) {
         auto vlmExecutionContext = std::static_pointer_cast<VisualLanguageModelServableExecutionContext>(executionContext);
         auto perfMetrics = tryGetVlmPerfMetrics(vlmExecutionContext->generationHandle);
         if (perfMetrics)
