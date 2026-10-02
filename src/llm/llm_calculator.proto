@@ -151,4 +151,45 @@ message LLMCalculatorOptions {
     }
 
     optional ChatTemplateMode chat_template_mode = 26;
+
+    // KV cache store of the main model: persists KV cache blocks through a store provider and serves them back to
+    // later requests, also after a restart. The fields are those of GenAI's CacheStoreConfig; a field left unset
+    // keeps GenAI's default. Requires enable_prefix_caching.
+    message CacheStoreConfig {
+      message MovementPolicy {
+        // on_evict | immediate | on_access_selective | explicit_only
+        optional string trigger = 1;
+      }
+
+      message WritePolicy {
+        optional MovementPolicy device_to_store = 1;
+        optional MovementPolicy host_to_store = 2;
+      }
+
+      // Master switch of the store tier.
+      optional bool enable = 1 [default = false];
+      // Provider to select from the plugin library, e.g. "file".
+      optional string provider = 2;
+      // Path of the store plugin library; unset selects the built-in "file" provider.
+      optional string library_path = 3;
+      // On-disk location passed to the provider.
+      optional string directory = 4;
+      // Capacity budget passed to the provider.
+      optional uint64 capacity_bytes = 5;
+      // Size of the host staging pool every store transfer goes through.
+      optional uint64 staging_bytes = 6;
+      // Number of host I/O threads that call the provider.
+      optional uint32 io_threads = 7;
+      // relaxed | strict
+      optional string durability = 8;
+      optional bool verify_key_tokens = 9;
+      optional bool verify_payload_crc = 10;
+      // Bytes copied for store writes in one pipeline step.
+      optional uint64 step_transfer_budget_bytes = 11;
+      optional WritePolicy write = 12;
+      // Provider-specific settings, passed to the provider unchanged.
+      map<string, string> properties = 13;
+    }
+
+    optional CacheStoreConfig cache_store = 27;
 }

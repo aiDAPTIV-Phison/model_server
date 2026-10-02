@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 #include <openvino/genai/cache_eviction.hpp>
+#include <openvino/genai/cache_store_config.hpp>
 #include <openvino/genai/sparse_attention.hpp>
 #include <openvino/genai/continuous_batching_pipeline.hpp>
 #include <openvino/openvino.hpp>
@@ -123,6 +124,63 @@ ov::genai::CacheEvictionConfig prepareCacheEvictionConfig(const mediapipe::LLMCa
     return ov::genai::CacheEvictionConfig(startSize, recentSize, maxCacheSize, aggregationMode, applyRotation, snapkvWindowSize, kvCrushConfig);
 }
 
+Status prepareCacheStoreConfig(const mediapipe::LLMCalculatorOptions& nodeOptions, ov::genai::CacheStoreConfig& cacheStoreConfig) {
+    const auto& options = nodeOptions.cache_store();
+    cacheStoreConfig.enable = options.enable();
+    if (options.has_provider()) {
+        cacheStoreConfig.provider = options.provider();
+    }
+    if (options.has_library_path()) {
+        cacheStoreConfig.library_path = options.library_path();
+    }
+    if (options.has_directory()) {
+        cacheStoreConfig.directory = options.directory();
+    }
+    if (options.has_capacity_bytes()) {
+        cacheStoreConfig.capacity_bytes = options.capacity_bytes();
+    }
+    if (options.has_staging_bytes()) {
+        cacheStoreConfig.staging_bytes = options.staging_bytes();
+    }
+    if (options.has_io_threads()) {
+        cacheStoreConfig.io_threads = options.io_threads();
+    }
+    if (options.has_durability()) {
+        if (options.durability() == "relaxed") {
+            cacheStoreConfig.durability = ov::genai::CacheStoreConfig::Durability::Relaxed;
+        } else if (options.durability() == "strict") {
+            cacheStoreConfig.durability = ov::genai::CacheStoreConfig::Durability::Strict;
+        } else {
+            SPDLOG_ERROR("cache_store durability must be relaxed or strict: {}", options.durability());
+            return StatusCode::LLM_NODE_RESOURCE_STATE_INITIALIZATION_FAILED;
+        }
+    }
+    if (options.has_verify_key_tokens()) {
+        cacheStoreConfig.verify_key_tokens = options.verify_key_tokens();
+    }
+    if (options.has_verify_payload_crc()) {
+        cacheStoreConfig.verify_payload_crc = options.verify_payload_crc();
+    }
+    if (options.has_step_transfer_budget_bytes()) {
+        cacheStoreConfig.step_transfer_budget_bytes = options.step_transfer_budget_bytes();
+    }
+    try {
+        if (options.write().device_to_store().has_trigger()) {
+            cacheStoreConfig.write.device_to_store.trigger = ov::genai::write_trigger_from_string(options.write().device_to_store().trigger());
+        }
+        if (options.write().host_to_store().has_trigger()) {
+            cacheStoreConfig.write.host_to_store.trigger = ov::genai::write_trigger_from_string(options.write().host_to_store().trigger());
+        }
+    } catch (const ov::Exception& e) {
+        SPDLOG_ERROR("cache_store write trigger is not valid: {}", e.what());
+        return StatusCode::LLM_NODE_RESOURCE_STATE_INITIALIZATION_FAILED;
+    }
+    for (const auto& [key, value] : options.properties()) {
+        cacheStoreConfig.properties[key] = value;
+    }
+    return StatusCode::OK;
+}
+
 ov::genai::SchedulerConfig ContinuousBatchingServableInitializer::prepareDraftPipelineSchedulerConfig(const mediapipe::LLMCalculatorOptions& nodeOptions) {
     ov::genai::SchedulerConfig config;
     config.max_num_batched_tokens = nodeOptions.has_draft_max_num_batched_tokens() ? nodeOptions.draft_max_num_batched_tokens() : nodeOptions.max_num_batched_tokens();
@@ -188,6 +246,13 @@ Status ContinuousBatchingServableInitializer::initialize(std::shared_ptr<GenAiSe
         properties->schedulerConfig.sparse_attention_config = prepareSparseAttentionConfig(nodeOptions);
     } else {
         properties->schedulerConfig.use_sparse_attention = false;
+    }
+
+    if (nodeOptions.has_cache_store()) {
+        status = prepareCacheStoreConfig(nodeOptions, properties->schedulerConfig.cache_store);
+        if (!status.ok()) {
+            return status;
+        }
     }
 
     properties->device = nodeOptions.device();
