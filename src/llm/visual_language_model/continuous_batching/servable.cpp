@@ -63,7 +63,7 @@ void VisualLanguageModelServable::logPerfMetrics(ov::genai::VLMPerfMetrics& perf
     // Generation speed from the mean time per output token; -1 when no second token was generated
     const double generationSpeedTps = tpotMs > 0 ? 1000.0 / tpotMs : -1.0;
 
-    SPDLOG_LOGGER_INFO(llm_calculator_logger, "TTFT (ms): {:.0f} TPS (tok/s): {:.2f}", ttftMs, generationSpeedTps);
+    SPDLOG_LOGGER_INFO(llm_calculator_logger, "TTFT (ms): {:.0f}    Throughput (token/s): {:.2f}", ttftMs, generationSpeedTps);
 
     SPDLOG_LOGGER_DEBUG(
         llm_calculator_logger,
