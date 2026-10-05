@@ -168,9 +168,9 @@ message LLMCalculatorOptions {
 
       // Master switch of the store tier.
       optional bool enable = 1 [default = false];
-      // Provider to select from the plugin library, e.g. "file".
+      // Provider to select from the plugin library; unset selects its first one.
       optional string provider = 2;
-      // Path of the store plugin library; unset selects the built-in "file" provider.
+      // Path of the store plugin library. Required when the store is enabled.
       optional string library_path = 3;
       // On-disk location passed to the provider.
       optional string directory = 4;
