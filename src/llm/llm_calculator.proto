@@ -153,8 +153,9 @@ message LLMCalculatorOptions {
     optional ChatTemplateMode chat_template_mode = 26;
 
     // KV cache store of the main model: persists KV cache blocks through a store provider and serves them back to
-    // later requests, also after a restart. The fields are those of GenAI's CacheStoreConfig; a field left unset
-    // keeps GenAI's default. Requires enable_prefix_caching.
+    // later requests. The fields are those of GenAI's CacheStoreConfig; a field left unset keeps GenAI's default.
+    // With enable_prefix_caching a request first reuses blocks still in the device cache; without it every cached
+    // prefix is read from the store.
     message CacheStoreConfig {
       message MovementPolicy {
         // on_evict | immediate | on_access_selective | explicit_only
