@@ -188,9 +188,13 @@ message LLMCalculatorOptions {
       // Bytes copied for store writes in one pipeline step.
       optional uint64 step_transfer_budget_bytes = 11;
       optional WritePolicy write = 12;
-      // Provider-specific settings, passed to the provider unchanged.
-      map<string, string> properties = 13;
+      // Provider-specific settings as one JSON object, for example '{"some_size_gb": 4, "some_switch": true}'.
+      // Each member is passed to the provider as a name and a text value.
+      optional string properties = 13;
     }
 
     optional CacheStoreConfig cache_store = 27;
+
+    // Fixed number of KV cache blocks to allocate, instead of cache_size in GB. 0 leaves the size to cache_size.
+    optional uint64 num_kv_blocks = 28 [default = 0];
 }

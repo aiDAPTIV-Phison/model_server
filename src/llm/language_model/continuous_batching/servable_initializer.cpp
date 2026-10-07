@@ -175,8 +175,30 @@ Status prepareCacheStoreConfig(const mediapipe::LLMCalculatorOptions& nodeOption
         SPDLOG_ERROR("cache_store write trigger is not valid: {}", e.what());
         return StatusCode::LLM_NODE_RESOURCE_STATE_INITIALIZATION_FAILED;
     }
-    for (const auto& [key, value] : options.properties()) {
-        cacheStoreConfig.properties[key] = value;
+    if (options.has_properties() && !options.properties().empty()) {
+        rapidjson::Document document;
+        if (document.Parse(options.properties().c_str()).HasParseError() || !document.IsObject()) {
+            SPDLOG_ERROR("cache_store properties must be a JSON object: {}", options.properties());
+            return StatusCode::LLM_NODE_RESOURCE_STATE_INITIALIZATION_FAILED;
+        }
+        for (auto it = document.MemberBegin(); it != document.MemberEnd(); ++it) {
+            const std::string name = it->name.GetString();
+            const rapidjson::Value& value = it->value;
+            if (value.IsString()) {
+                cacheStoreConfig.properties[name] = value.GetString();
+            } else if (value.IsBool()) {
+                cacheStoreConfig.properties[name] = value.GetBool() ? "true" : "false";
+            } else if (value.IsUint64()) {
+                cacheStoreConfig.properties[name] = std::to_string(value.GetUint64());
+            } else if (value.IsInt64()) {
+                cacheStoreConfig.properties[name] = std::to_string(value.GetInt64());
+            } else if (value.IsDouble()) {
+                cacheStoreConfig.properties[name] = std::to_string(value.GetDouble());
+            } else {
+                SPDLOG_ERROR("cache_store property {} must be a text, a number or true/false", name);
+                return StatusCode::LLM_NODE_RESOURCE_STATE_INITIALIZATION_FAILED;
+            }
+        }
     }
     return StatusCode::OK;
 }
@@ -227,6 +249,7 @@ Status ContinuousBatchingServableInitializer::initialize(std::shared_ptr<GenAiSe
 
     properties->schedulerConfig.max_num_batched_tokens = nodeOptions.max_num_batched_tokens();
     properties->schedulerConfig.cache_size = nodeOptions.cache_size();
+    properties->schedulerConfig.num_kv_blocks = nodeOptions.num_kv_blocks();
     properties->schedulerConfig.dynamic_split_fuse = nodeOptions.dynamic_split_fuse();
     properties->schedulerConfig.max_num_seqs = nodeOptions.max_num_seqs();
     properties->schedulerConfig.enable_prefix_caching = nodeOptions.enable_prefix_caching();
@@ -358,7 +381,7 @@ Status ContinuousBatchingServableInitializer::initialize(std::shared_ptr<GenAiSe
     }
     properties->maxModelLength = parseMaxModelLength(parsedModelsPath);
 
-    properties->llmExecutorWrapper = std::make_shared<LLMExecutorWrapper>(properties->pipeline, properties->schedulerConfig.cache_size == 0);
+    properties->llmExecutorWrapper = std::make_shared<LLMExecutorWrapper>(properties->pipeline, properties->schedulerConfig.cache_size == 0 && properties->schedulerConfig.num_kv_blocks == 0);
 
     return StatusCode::OK;
 }
