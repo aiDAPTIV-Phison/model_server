@@ -164,16 +164,15 @@ Status prepareCacheStoreConfig(const mediapipe::LLMCalculatorOptions& nodeOption
     if (options.has_step_transfer_budget_bytes()) {
         cacheStoreConfig.step_transfer_budget_bytes = options.step_transfer_budget_bytes();
     }
-    try {
-        if (options.write().device_to_store().has_trigger()) {
-            cacheStoreConfig.write.device_to_store.trigger = ov::genai::write_trigger_from_string(options.write().device_to_store().trigger());
+    if (options.has_write_trigger()) {
+        try {
+            const ov::genai::WriteTrigger trigger = ov::genai::write_trigger_from_string(options.write_trigger());
+            cacheStoreConfig.write.device_to_store.trigger = trigger;
+            cacheStoreConfig.write.host_to_store.trigger = trigger;
+        } catch (const ov::Exception& e) {
+            SPDLOG_ERROR("cache_store write_trigger is not valid: {}", e.what());
+            return StatusCode::LLM_NODE_RESOURCE_STATE_INITIALIZATION_FAILED;
         }
-        if (options.write().host_to_store().has_trigger()) {
-            cacheStoreConfig.write.host_to_store.trigger = ov::genai::write_trigger_from_string(options.write().host_to_store().trigger());
-        }
-    } catch (const ov::Exception& e) {
-        SPDLOG_ERROR("cache_store write trigger is not valid: {}", e.what());
-        return StatusCode::LLM_NODE_RESOURCE_STATE_INITIALIZATION_FAILED;
     }
     if (options.has_properties() && !options.properties().empty()) {
         rapidjson::Document document;

@@ -157,16 +157,6 @@ message LLMCalculatorOptions {
     // With enable_prefix_caching a request first reuses blocks still in the device cache; without it every cached
     // prefix is read from the store.
     message CacheStoreConfig {
-      message MovementPolicy {
-        // on_evict | immediate | on_access_selective | explicit_only
-        optional string trigger = 1;
-      }
-
-      message WritePolicy {
-        optional MovementPolicy device_to_store = 1;
-        optional MovementPolicy host_to_store = 2;
-      }
-
       // Master switch of the store tier.
       optional bool enable = 1 [default = false];
       // Provider to select from the plugin library; unset selects its first one.
@@ -187,7 +177,9 @@ message LLMCalculatorOptions {
       optional bool verify_payload_crc = 10;
       // Bytes copied for store writes in one pipeline step.
       optional uint64 step_transfer_budget_bytes = 11;
-      optional WritePolicy write = 12;
+      // When blocks are written to the store, for every movement between tiers:
+      // on_evict | immediate | on_access_selective | explicit_only
+      optional string write_trigger = 12;
       // Provider-specific settings as one JSON object, for example '{"some_size_gb": 4, "some_switch": true}'.
       // Each member is passed to the provider as a name and a text value.
       optional string properties = 13;
