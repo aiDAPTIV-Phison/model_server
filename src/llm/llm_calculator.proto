@@ -171,7 +171,7 @@ message LLMCalculatorOptions {
       optional bool enable = 1 [default = false];
       // Provider to select from the plugin library; unset selects its first one.
       optional string provider = 2;
-      // Path of the store plugin library. Required when the store is enabled.
+      // Path of the store plugin library. Unset: the library named after the provider, next to the GenAI library.
       optional string library_path = 3;
       // On-disk location passed to the provider.
       optional string directory = 4;
