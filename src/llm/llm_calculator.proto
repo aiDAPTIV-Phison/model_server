@@ -165,18 +165,22 @@ message LLMCalculatorOptions {
       optional string library_path = 3;
       // On-disk location passed to the provider.
       optional string directory = 4;
-      // Capacity budget passed to the provider.
-      optional uint64 capacity_bytes = 5;
-      // Size of the host staging pool every store transfer goes through.
-      optional uint64 staging_bytes = 6;
+      // Sizes carry their unit in the name (GB = 1024^3 bytes, MB = 1024^2 bytes); fields 5, 6 and 11 held them in
+      // bytes before. Their names are not reserved: the text format would skip a reserved name silently, so a graph
+      // with an old name fails to load instead.
+      reserved 5, 6, 11;
+      // Capacity budget passed to the provider, in GB.
+      optional uint64 store_capacity_gb = 14;
+      // Size of the host staging pool every store transfer goes through, in MB.
+      optional uint64 staging_mb = 15;
       // Number of host I/O threads that call the provider.
       optional uint32 io_threads = 7;
       // relaxed | strict
       optional string durability = 8;
       optional bool verify_key_tokens = 9;
       optional bool verify_payload_crc = 10;
-      // Bytes copied for store writes in one pipeline step.
-      optional uint64 step_transfer_budget_bytes = 11;
+      // MB copied for store writes in one pipeline step; 0 writes a request's blocks when it ends.
+      optional uint64 step_transfer_budget_mb = 16;
       // When blocks are written to the store, for every movement between tiers:
       // on_evict | immediate | on_access_selective | explicit_only
       optional string write_trigger = 12;

@@ -15,6 +15,7 @@
 //*****************************************************************************
 #include <algorithm>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -124,6 +125,16 @@ ov::genai::CacheEvictionConfig prepareCacheEvictionConfig(const mediapipe::LLMCa
     return ov::genai::CacheEvictionConfig(startSize, recentSize, maxCacheSize, aggregationMode, applyRotation, snapkvWindowSize, kvCrushConfig);
 }
 
+// A size from the graph in units of 2^shift bytes, as GenAI takes it in bytes
+static Status cacheStoreSizeToBytes(const char* name, uint64_t value, unsigned shift, size_t& bytes) {
+    if (value > (std::numeric_limits<size_t>::max() >> shift)) {
+        SPDLOG_ERROR("cache_store {} is too large: {}", name, value);
+        return StatusCode::LLM_NODE_RESOURCE_STATE_INITIALIZATION_FAILED;
+    }
+    bytes = static_cast<size_t>(value) << shift;
+    return StatusCode::OK;
+}
+
 Status prepareCacheStoreConfig(const mediapipe::LLMCalculatorOptions& nodeOptions, ov::genai::CacheStoreConfig& cacheStoreConfig) {
     const auto& options = nodeOptions.cache_store();
     cacheStoreConfig.enable = options.enable();
@@ -136,11 +147,19 @@ Status prepareCacheStoreConfig(const mediapipe::LLMCalculatorOptions& nodeOption
     if (options.has_directory()) {
         cacheStoreConfig.directory = options.directory();
     }
-    if (options.has_capacity_bytes()) {
-        cacheStoreConfig.capacity_bytes = options.capacity_bytes();
+    if (options.has_store_capacity_gb()) {
+        size_t bytes = 0;
+        auto status = cacheStoreSizeToBytes("store_capacity_gb", options.store_capacity_gb(), 30, bytes);
+        if (!status.ok()) {
+            return status;
+        }
+        cacheStoreConfig.capacity_bytes = bytes;
     }
-    if (options.has_staging_bytes()) {
-        cacheStoreConfig.staging_bytes = options.staging_bytes();
+    if (options.has_staging_mb()) {
+        auto status = cacheStoreSizeToBytes("staging_mb", options.staging_mb(), 20, cacheStoreConfig.staging_bytes);
+        if (!status.ok()) {
+            return status;
+        }
     }
     if (options.has_io_threads()) {
         cacheStoreConfig.io_threads = options.io_threads();
@@ -161,8 +180,12 @@ Status prepareCacheStoreConfig(const mediapipe::LLMCalculatorOptions& nodeOption
     if (options.has_verify_payload_crc()) {
         cacheStoreConfig.verify_payload_crc = options.verify_payload_crc();
     }
-    if (options.has_step_transfer_budget_bytes()) {
-        cacheStoreConfig.step_transfer_budget_bytes = options.step_transfer_budget_bytes();
+    if (options.has_step_transfer_budget_mb()) {
+        auto status = cacheStoreSizeToBytes("step_transfer_budget_mb", options.step_transfer_budget_mb(), 20,
+            cacheStoreConfig.step_transfer_budget_bytes);
+        if (!status.ok()) {
+            return status;
+        }
     }
     if (options.has_write_trigger()) {
         try {
