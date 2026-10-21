@@ -181,26 +181,31 @@ absl::Status ContinuousBatchingServable::readPartialExecutionResults(std::shared
     return absl::OkStatus();
 }
 
+void ContinuousBatchingServable::reportPerfMetrics(std::shared_ptr<GenAiServableExecutionContext>& executionContext) {
+    auto cbExecutionContext = std::static_pointer_cast<ContinuousBatchingServableExecutionContext>(executionContext);
+    auto perfMetrics = tryGetPerfMetrics(cbExecutionContext->generationHandle);
+    if (!perfMetrics) {
+        return;
+    }
+    if (llm_calculator_logger->should_log(spdlog::level::info)) {
+        logPerfMetrics(*perfMetrics);
+    }
+    appendPerfMetric(executionContext->response, perfMetrics->get_ttft().mean, perfMetrics->get_tpot().mean,
+        cachedPromptTokens(perfMetrics->get_cache_diagnostics()));
+}
+
 absl::Status ContinuousBatchingServable::prepareCompleteResponse(std::shared_ptr<GenAiServableExecutionContext>& executionContext) {
     auto status = GenAiServable::prepareCompleteResponse(executionContext);
-    if (status.ok() && llm_calculator_logger->should_log(spdlog::level::info)) {
-        auto cbExecutionContext = std::static_pointer_cast<ContinuousBatchingServableExecutionContext>(executionContext);
-        auto perfMetrics = tryGetPerfMetrics(cbExecutionContext->generationHandle);
-        if (perfMetrics)
-            logPerfMetrics(*perfMetrics);
+    if (status.ok()) {
+        reportPerfMetrics(executionContext);
     }
     return status;
 }
 
 absl::Status ContinuousBatchingServable::preparePartialResponse(std::shared_ptr<GenAiServableExecutionContext>& executionContext) {
     auto status = GenAiServable::preparePartialResponse(executionContext);
-    if (status.ok() &&
-        !executionContext->sendLoopbackSignal &&
-        llm_calculator_logger->should_log(spdlog::level::info)) {
-        auto cbExecutionContext = std::static_pointer_cast<ContinuousBatchingServableExecutionContext>(executionContext);
-        auto perfMetrics = tryGetPerfMetrics(cbExecutionContext->generationHandle);
-        if (perfMetrics)
-            logPerfMetrics(*perfMetrics);
+    if (status.ok() && !executionContext->sendLoopbackSignal) {
+        reportPerfMetrics(executionContext);
     }
     return status;
 }

@@ -101,26 +101,33 @@ std::shared_ptr<GenAiServableProperties> VisualLanguageModelServable::getPropert
     return properties;
 }
 
+void VisualLanguageModelServable::reportPerfMetrics(std::shared_ptr<GenAiServableExecutionContext>& executionContext) {
+    auto vlmExecutionContext = std::static_pointer_cast<VisualLanguageModelServableExecutionContext>(executionContext);
+    auto perfMetrics = tryGetVlmPerfMetrics(vlmExecutionContext->generationHandle);
+    if (!perfMetrics) {
+        return;
+    }
+    if (llm_calculator_logger->should_log(spdlog::level::info)) {
+        logPerfMetrics(*perfMetrics);
+    }
+    // the time to the first token includes the embeddings preparation, as in the log line
+    const double ttftMs = perfMetrics->get_ttft().mean + perfMetrics->get_prepare_embeddings_duration().mean;
+    appendPerfMetric(executionContext->response, ttftMs, perfMetrics->get_tpot().mean,
+        cachedPromptTokens(perfMetrics->get_cache_diagnostics()));
+}
+
 absl::Status VisualLanguageModelServable::prepareCompleteResponse(std::shared_ptr<GenAiServableExecutionContext>& executionContext) {
     auto status = GenAiServable::prepareCompleteResponse(executionContext);
-    if (status.ok() && llm_calculator_logger->should_log(spdlog::level::info)) {
-        auto vlmExecutionContext = std::static_pointer_cast<VisualLanguageModelServableExecutionContext>(executionContext);
-        auto perfMetrics = tryGetVlmPerfMetrics(vlmExecutionContext->generationHandle);
-        if (perfMetrics)
-            logPerfMetrics(*perfMetrics);
+    if (status.ok()) {
+        reportPerfMetrics(executionContext);
     }
     return status;
 }
 
 absl::Status VisualLanguageModelServable::preparePartialResponse(std::shared_ptr<GenAiServableExecutionContext>& executionContext) {
     auto status = GenAiServable::preparePartialResponse(executionContext);
-    if (status.ok() &&
-        !executionContext->sendLoopbackSignal &&
-        llm_calculator_logger->should_log(spdlog::level::info)) {
-        auto vlmExecutionContext = std::static_pointer_cast<VisualLanguageModelServableExecutionContext>(executionContext);
-        auto perfMetrics = tryGetVlmPerfMetrics(vlmExecutionContext->generationHandle);
-        if (perfMetrics)
-            logPerfMetrics(*perfMetrics);
+    if (status.ok() && !executionContext->sendLoopbackSignal) {
+        reportPerfMetrics(executionContext);
     }
     return status;
 }

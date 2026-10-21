@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //*****************************************************************************
+#include <cmath>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -26,6 +27,8 @@
 #include "mediapipe/framework/calculator_graph.h"
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
 #pragma GCC diagnostic pop
 #pragma warning(pop)
 
@@ -47,6 +50,76 @@ namespace ovms {
 
 double calculatePrefillSpeed(size_t inputTokenCount, double ttftMs) {
     return ttftMs > 0.0 ? (1000.0 * inputTokenCount) / ttftMs : 0.0;
+}
+
+size_t cachedPromptTokens(const ov::genai::CacheDiagnostics& diagnostics) {
+    return diagnostics.device_hit_tokens + diagnostics.host_hit_tokens + diagnostics.store_hit_tokens;
+}
+
+static void addPerfMetric(rapidjson::Document& doc, double ttftMs, double tpotMs, size_t processedTokenCount) {
+    auto& allocator = doc.GetAllocator();
+    if (doc.HasMember("perf_metric")) {
+        doc.RemoveMember("perf_metric");
+    }
+    // to 0.1 ms: the timer resolution is far coarser than the float digits
+    const auto round = [](double ms) { return std::round(ms * 10.0) / 10.0; };
+    rapidjson::Value perfMetric(rapidjson::kObjectType);
+    perfMetric.AddMember("ttft_ms", round(ttftMs), allocator);
+    perfMetric.AddMember("tpot_ms", round(tpotMs), allocator);
+    perfMetric.AddMember("processed_token_cnt", static_cast<uint64_t>(processedTokenCount), allocator);
+    doc.AddMember("perf_metric", perfMetric, allocator);
+}
+
+static bool hasFinishReason(const rapidjson::Document& doc) {
+    if (!doc.HasMember("choices") || !doc["choices"].IsArray() || doc["choices"].Empty()) {
+        return false;
+    }
+    const auto& choice = doc["choices"][0];
+    return choice.IsObject() && choice.HasMember("finish_reason") && !choice["finish_reason"].IsNull();
+}
+
+void appendPerfMetric(std::string& response, double ttftMs, double tpotMs, size_t processedTokenCount) {
+    static const std::string eventPrefix = "data: ";
+    static const std::string eventSeparator = "\n\n";
+    if (response.rfind(eventPrefix, 0) != 0) {
+        rapidjson::Document doc;
+        doc.Parse(response.c_str());
+        if (doc.HasParseError() || !doc.IsObject()) {
+            return;
+        }
+        addPerfMetric(doc, ttftMs, tpotMs, processedTokenCount);
+        rapidjson::StringBuffer buffer;
+        rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+        doc.Accept(writer);
+        response = buffer.GetString();
+        return;
+    }
+    // Streaming: a buffer of "data: <json>" events; the one with the finish reason ends the request
+    std::string result;
+    result.reserve(response.size() + 96);
+    size_t start = 0;
+    while (start < response.size()) {
+        const size_t end = response.find(eventSeparator, start);
+        std::string event = response.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        if (event.rfind(eventPrefix, 0) == 0) {
+            rapidjson::Document doc;
+            doc.Parse(event.c_str() + eventPrefix.size());
+            if (!doc.HasParseError() && doc.IsObject() && hasFinishReason(doc)) {
+                addPerfMetric(doc, ttftMs, tpotMs, processedTokenCount);
+                rapidjson::StringBuffer buffer;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                doc.Accept(writer);
+                event = eventPrefix + buffer.GetString();
+            }
+        }
+        result += event;
+        if (end == std::string::npos) {
+            break;
+        }
+        result += eventSeparator;
+        start = end + eventSeparator.size();
+    }
+    response = std::move(result);
 }
 
 void GenAiServable::determineDecodingMethod() {

@@ -29,6 +29,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include "io_processing/delta.hpp"
+#include "openvino/genai/prompt_cache.hpp"
 #include "openvino/genai/text_streamer.hpp"
 #include "mediapipe/framework/calculator_graph.h"
 #pragma GCC diagnostic pop
@@ -50,6 +51,13 @@ namespace ovms {
 static std::atomic<uint64_t> currentRequestId = 0;
 
 double calculatePrefillSpeed(size_t inputTokenCount, double ttftMs);
+
+// Adds "perf_metric": {"ttft_ms", "tpot_ms", "processed_token_cnt"} to a finished request's response: to the JSON
+// object of a unary response, or to the streamed event that carries the finish reason. processed_token_cnt counts
+// the prompt tokens served from a cache instead of being computed.
+void appendPerfMetric(std::string& response, double ttftMs, double tpotMs, size_t processedTokenCount);
+// Prompt tokens of a request served from a cache (device prefix cache, host cache or cache store)
+size_t cachedPromptTokens(const ov::genai::CacheDiagnostics& diagnostics);
 
 /*
 GenAiServable support.

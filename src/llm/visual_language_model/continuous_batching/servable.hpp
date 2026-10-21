@@ -36,6 +36,8 @@ struct VisualLanguageModelServableExecutionContext : public ContinuousBatchingSe
 
 class VisualLanguageModelServable : public ContinuousBatchingServable {
     void logPerfMetrics(ov::genai::VLMPerfMetrics& perfMetrics);
+    // Logs a finished request's metrics and adds them to its response
+    void reportPerfMetrics(std::shared_ptr<GenAiServableExecutionContext>& executionContext);
 
 public:
     VisualLanguageModelServable() {

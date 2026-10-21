@@ -41,6 +41,8 @@ protected:
     std::shared_ptr<ContinuousBatchingServableProperties> properties;
     void notifyExecutorThread();
     void logPerfMetrics(ov::genai::PerfMetrics& perfMetrics);
+    // Logs a finished request's metrics and adds them to its response
+    void reportPerfMetrics(std::shared_ptr<GenAiServableExecutionContext>& executionContext);
 
 public:
     ContinuousBatchingServable() {
